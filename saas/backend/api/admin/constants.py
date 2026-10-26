@@ -100,3 +100,9 @@ class VerifyApiParamLocationEnum(ChoicesEnum, LowerStrEnum):
     GROUP_IN_PATH = auto()
 
     _choices_labels = skip(((GROUP_IN_PATH, "在URL里的group id参数"),))
+
+
+# 单次最多清理的用户组数量
+SUBJECT_GROUP_CLEANUP_MAX_GROUP_IDS = 100
+# 单次最多清理的策略数量
+SUBJECT_POLICY_CLEANUP_MAX_POLICY_IDS = 200

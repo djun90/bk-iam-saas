@@ -105,6 +105,18 @@ urlpatterns = [
         views.AdminSubjectPermissionCleanupViewSet.as_view({"delete": "cleanup"}),
         name="open.admin.subject.cleanup",
     ),
+    # 清理用户的用户组
+    path(
+        "cleanup/users/groups/",
+        views.AdminSubjectGroupCleanupViewSet.as_view({"delete": "cleanup"}),
+        name="open.admin.subject.group.cleanup",
+    ),
+    # 清理用户的自定义权限
+    path(
+        "cleanup/users/policies/",
+        views.AdminSubjectPolicyCleanupViewSet.as_view({"delete": "cleanup"}),
+        name="open.admin.subject.policy.cleanup",
+    ),
     # 组织架构同步
     path(
         "organization/sync/",

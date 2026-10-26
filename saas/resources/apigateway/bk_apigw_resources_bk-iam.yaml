@@ -3937,3 +3937,59 @@ paths:
           resourcePermissionRequired: true
         disabledStages: []
         descriptionEn: Admin - Cleanup user permissions
+  /api/v1/open/admin/cleanup/users/groups/:
+    delete:
+      operationId: admin_cleanup_users_groups
+      description: 超管 - 清理用户的用户组（将用户移出指定用户组）
+      tags:
+        - open
+        - admin
+      responses:
+        default:
+          description: ""
+      x-bk-apigateway-resource:
+        isPublic: true
+        allowApplyPermission: true
+        matchSubpath: false
+        backend:
+          type: HTTP
+          method: delete
+          path: /api/v1/open/admin/cleanup/users/groups/
+          matchSubpath: false
+          timeout: 0
+          upstreams: {}
+          transformHeaders: {}
+        authConfig:
+          userVerifiedRequired: false
+          appVerifiedRequired: true
+          resourcePermissionRequired: true
+        disabledStages: []
+        descriptionEn: Admin - Cleanup a user's groups (remove the user from the specified groups)
+  /api/v1/open/admin/cleanup/users/policies/:
+    delete:
+      operationId: admin_cleanup_users_policies
+      description: 超管 - 清理用户的自定义权限（不含临时权限）
+      tags:
+        - open
+        - admin
+      responses:
+        default:
+          description: ""
+      x-bk-apigateway-resource:
+        isPublic: true
+        allowApplyPermission: true
+        matchSubpath: false
+        backend:
+          type: HTTP
+          method: delete
+          path: /api/v1/open/admin/cleanup/users/policies/
+          matchSubpath: false
+          timeout: 0
+          upstreams: {}
+          transformHeaders: {}
+        authConfig:
+          userVerifiedRequired: false
+          appVerifiedRequired: true
+          resourcePermissionRequired: true
+        disabledStages: []
+        descriptionEn: Admin - Cleanup a user's custom policies (temporary policies excluded)
