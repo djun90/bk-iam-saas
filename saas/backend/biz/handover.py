@@ -9,10 +9,14 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 """
 import json
+import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type
+from datetime import timedelta
+from typing import Any, Dict, List, Set, Type
 
+from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from django.utils.functional import cached_property
 
 from backend.apps.handover.constants import HandoverObjectType, HandoverStatus
@@ -32,6 +36,8 @@ from backend.common.error_codes import error_codes
 from backend.common.lock import gen_permission_handover_lock
 from backend.service.constants import RoleType
 from backend.service.models.subject import Subject
+
+logger = logging.getLogger("app")
 
 
 class BaseHandoverDataProvider(ABC):
@@ -401,3 +407,42 @@ class HandoverBiz:
                     )
 
         return handover_task_details
+
+
+class HandoverSuppressionBiz:
+    """抑制接入系统把已成功交接走的权限重新写回交出人"""
+
+    @staticmethod
+    def get_suppressed(object_type: str, object_id: str, usernames: List[str]) -> Set[str]:
+        """返回 TTL 内已成功交接、且命中 object_id 的用户名集合"""
+        ttl = settings.BKAPP_READD_SUPPRESSION_TTL_DAYS
+        if ttl <= 0 or not usernames:
+            return set()
+
+        records = list(
+            HandoverRecord.objects.filter(
+                handover_from__in=usernames,
+                status__in=(HandoverStatus.SUCCEED.value, HandoverStatus.PARTIAL_FAILED.value),
+                created_time__gt=timezone.now() - timedelta(days=ttl),
+            ).values_list("id", "handover_from")
+        )
+        if not records:
+            return set()
+
+        hit_record_ids = set(
+            HandoverTask.objects.filter(
+                handover_record_id__in=[rid for rid, _ in records],
+                status=HandoverTaskStatus.SUCCEED.value,
+                object_type=object_type,
+                object_id=object_id,
+            ).values_list("handover_record_id", flat=True)
+        )
+        return {username for rid, username in records if rid in hit_record_ids}
+
+    @classmethod
+    def filter(cls, object_type: str, object_id: str, usernames: List[str]) -> List[str]:
+        """过滤最近交接过的用户"""
+        suppressed = cls.get_suppressed(object_type, object_id, usernames)
+        if not suppressed:
+            return usernames
+        return [username for username in usernames if username not in suppressed]

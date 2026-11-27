@@ -27,6 +27,7 @@ from backend.api.management.v1.serializers import (
     ManagementGradeManagerUpdateSLZ,
     ManagementSourceSystemSLZ,
 )
+from backend.apps.handover.constants import HandoverObjectType
 from backend.apps.role.audit import (
     RoleCreateAuditProvider,
     RoleMemberCreateAuditProvider,
@@ -37,6 +38,7 @@ from backend.apps.role.models import Role, RoleSource
 from backend.apps.role.serializers import RoleIdSLZ
 from backend.apps.role.tasks import sync_subset_manager_subject_scope
 from backend.audit.audit import audit_context_setter, view_audit_decorator
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.helper import RoleWithPermGroupBiz
 from backend.biz.role import RoleBiz, RoleCheckBiz
 from backend.common.lock import gen_role_upsert_lock
@@ -211,6 +213,7 @@ class ManagementGradeManagerMemberViewSet(GenericViewSet):
     role_check_biz = RoleCheckBiz()
 
     role_with_perm_group_biz = RoleWithPermGroupBiz()
+    suppression_biz = HandoverSuppressionBiz()
 
     @swagger_auto_schema(
         operation_description="分级管理员成员列表",
@@ -236,14 +239,17 @@ class ManagementGradeManagerMemberViewSet(GenericViewSet):
         serializer.is_valid(raise_exception=True)
 
         members = list(set(serializer.validated_data["members"]))
+        # 静默剔除：先过滤再校验配额，避免被忽略成员占用配额
+        members = self.suppression_biz.filter(HandoverObjectType.ROLE_IDS.value, str(role.id), members)
         # 检查成员数量是否满足限制
         self.role_check_biz.check_member_count(role.id, len(members))
 
         # 批量添加成员(添加时去重)
-        self.role_with_perm_group_biz.batch_add_grade_manager_member(role, members, request.user.username)
+        if members:
+            self.role_with_perm_group_biz.batch_add_grade_manager_member(role, members, request.user.username)
 
-        # 审计
-        audit_context_setter(role=role, members=members)
+        # 审计：记录请求的原始成员，抑制明细见 readd_suppression 日志
+        audit_context_setter(role=role, members=serializer.validated_data["members"])
 
         return Response({})
 

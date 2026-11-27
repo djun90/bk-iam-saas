@@ -25,12 +25,14 @@ from backend.api.management.v2.serializers import (
     ManagementGradeMangerDetailSLZ,
     ManagementSubsetMangerCreateSLZ,
 )
+from backend.apps.handover.constants import HandoverObjectType
 from backend.apps.role.audit import RoleCreateAuditProvider, RoleDeleteAuditProvider, RoleUpdateAuditProvider
 from backend.apps.role.models import Role, RoleRelation, RoleSource
 from backend.apps.role.tasks import delete_role
 from backend.audit.audit import audit_context_setter, view_audit_decorator
 from backend.audit.constants import AuditSourceType
 from backend.biz.group import GroupBiz
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.role import RoleBiz, RoleCheckBiz
 from backend.service.constants import GroupSaaSAttributeEnum, RoleSourceType, RoleType
 from backend.trans.open_management import GradeManagerTrans
@@ -163,6 +165,7 @@ class ManagementSubsetManagerViewSet(GenericViewSet):
     group_biz = GroupBiz()
     role_check_biz = RoleCheckBiz()
     trans = GradeManagerTrans()
+    suppression_biz = HandoverSuppressionBiz()
 
     @swagger_auto_schema(
         operation_description="子集管理员详情",
@@ -200,6 +203,8 @@ class ManagementSubsetManagerViewSet(GenericViewSet):
 
         # 名称唯一性检查
         self.role_check_biz.check_subset_manager_unique_name(grade_manager, data["name"], role.name)
+        # 静默剔除：先过滤再校验配额，避免被忽略成员占用配额
+        data["members"] = self.suppression_biz.filter(HandoverObjectType.ROLE_IDS.value, str(role.id), data["members"])
         # 检查成员数量是否满足限制
         self.role_check_biz.check_member_count(role.id, len(data["members"]))
 

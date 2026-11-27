@@ -39,17 +39,19 @@ from backend.apps.group.audit import (
 from backend.apps.group.constants import OperateEnum
 from backend.apps.group.models import Group
 from backend.apps.group.views import check_readonly_group
+from backend.apps.handover.constants import HandoverObjectType
 from backend.apps.policy.serializers import PolicySLZ
 from backend.apps.role.models import Role
 from backend.audit.audit import add_audit, audit_context_setter, view_audit_decorator
 from backend.audit.constants import AuditSourceType
 from backend.biz.group import GroupBiz, GroupCheckBiz, GroupCreationBean
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.policy import PolicyOperationBiz, PolicyQueryBiz
 from backend.biz.role import RoleBiz
 from backend.biz.utils import remove_not_exist_subject
 from backend.common.lock import gen_group_upsert_lock
 from backend.common.pagination import CompatiblePagination
-from backend.service.constants import GroupSaaSAttributeEnum, RoleType
+from backend.service.constants import GroupSaaSAttributeEnum, RoleType, SubjectType
 from backend.service.models import Subject
 from backend.trans.group import GroupTrans
 
@@ -154,6 +156,7 @@ class AdminGroupMemberViewSet(GenericViewSet):
 
     biz = GroupBiz()
     group_check_biz = GroupCheckBiz()
+    suppression_biz = HandoverSuppressionBiz()
 
     @swagger_auto_schema(
         operation_description="用户组成员列表",
@@ -188,6 +191,11 @@ class AdminGroupMemberViewSet(GenericViewSet):
         expired_at = data["expired_at"]
         # 成员Dict结构转换为Subject结构，并去重
         members = list(set(parse_obj_as(List[Subject], members_data)))
+
+        # 检查用户是否最近交接过用户组，存在则不加入
+        usernames = [m.id for m in members if m.type == SubjectType.USER.value]
+        allowed_usernames = self.suppression_biz.filter(HandoverObjectType.GROUP_IDS.value, str(group.id), usernames)
+        members = [m for m in members if m.type != SubjectType.USER.value or m.id in allowed_usernames]
 
         # 检测成员是否满足管理的授权范围
         role = Role.objects.get(type=RoleType.SUPER_MANAGER.value)

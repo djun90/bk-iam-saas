@@ -41,16 +41,18 @@ from backend.apps.group.audit import (
 )
 from backend.apps.group.models import Group
 from backend.apps.group.serializers import GroupAddMemberSLZ
+from backend.apps.handover.constants import HandoverObjectType
 from backend.apps.role.models import Role
 from backend.audit.audit import add_audit, audit_context_setter, view_audit_decorator
 from backend.audit.constants import AuditSourceType
 from backend.biz.group import GroupBiz, GroupCheckBiz, GroupCreationBean, GroupTemplateGrantBean
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.policy import PolicyOperationBiz, PolicyQueryBiz
 from backend.biz.role import RoleBiz, RoleListQuery
 from backend.biz.utils import remove_not_exist_subject
 from backend.common.lock import gen_group_upsert_lock
 from backend.common.pagination import CompatiblePagination
-from backend.service.constants import GroupSaaSAttributeEnum, RoleType
+from backend.service.constants import GroupSaaSAttributeEnum, RoleType, SubjectType
 from backend.service.models import Subject
 from backend.trans.open_management import ManagementCommonTrans
 
@@ -245,6 +247,7 @@ class ManagementGroupMemberViewSet(GenericViewSet):
     biz = GroupBiz()
     group_check_biz = GroupCheckBiz()
     role_biz = RoleBiz()
+    suppression_biz = HandoverSuppressionBiz()
 
     @swagger_auto_schema(
         operation_description="用户组成员列表",
@@ -280,13 +283,22 @@ class ManagementGroupMemberViewSet(GenericViewSet):
         # 成员Dict结构转换为Subject结构，并去重
         members = list(set(parse_obj_as(List[Subject], members_data)))
 
+        # 排除组织架构中不存在的成员
+        members = remove_not_exist_subject(members)
+
+        # 静默剔除：过滤放在配额/范围校验之前，避免被忽略成员占用配额
+        allowed_usernames = self.suppression_biz.filter(
+            HandoverObjectType.GROUP_IDS.value,
+            str(group.id),
+            [m.id for m in members if m.type == SubjectType.USER.value],
+        )
+        members = [m for m in members if m.type != SubjectType.USER.value or m.id in allowed_usernames]
+
         # 检测成员是否满足管理的授权范围
         role = self.role_biz.get_role_by_group_id(group.id)
         self.group_check_biz.check_role_subject_scope(role, members)
         self.group_check_biz.check_member_count(group.id, len(members))
 
-        # 排除组织架构中不存在的成员
-        members = remove_not_exist_subject(members)
         if members:
             # 添加成员
             self.biz.add_members(group.id, members, expired_at)

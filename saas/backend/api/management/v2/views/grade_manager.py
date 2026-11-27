@@ -19,6 +19,7 @@ from backend.api.management.constants import ManagementAPIEnum, VerifyApiParamLo
 from backend.api.management.mixins import ManagementAPIPermissionCheckMixin
 from backend.api.management.v2.permissions import ManagementAPIPermission
 from backend.api.management.v2.serializers import ManagementGradeManagerCreateSLZ, ManagementGradeMangerDetailSLZ
+from backend.apps.handover.constants import HandoverObjectType
 from backend.apps.role.audit import RoleCreateAuditProvider, RoleDeleteAuditProvider, RoleUpdateAuditProvider
 from backend.apps.role.models import Role, RoleSource
 from backend.apps.role.serializers import RoleIdSLZ
@@ -26,6 +27,7 @@ from backend.apps.role.tasks import delete_role, sync_subset_manager_subject_sco
 from backend.audit.audit import audit_context_setter, view_audit_decorator
 from backend.audit.constants import AuditSourceType
 from backend.biz.group import GroupBiz
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.role import RoleBiz, RoleCheckBiz
 from backend.common.lock import gen_role_upsert_lock
 from backend.service.constants import GroupSaaSAttributeEnum, RoleSourceType, RoleType
@@ -51,6 +53,7 @@ class ManagementGradeManagerViewSet(ManagementAPIPermissionCheckMixin, GenericVi
     group_biz = GroupBiz()
     role_check_biz = RoleCheckBiz()
     trans = GradeManagerTrans()
+    suppression_biz = HandoverSuppressionBiz()
 
     @swagger_auto_schema(
         operation_description="创建分级管理员",
@@ -135,6 +138,9 @@ class ManagementGradeManagerViewSet(ManagementAPIPermissionCheckMixin, GenericVi
         role_source = RoleSource.objects.get(source_type=RoleSourceType.API.value, role_id=role.id)
         auth_system_ids = list({i["system"] for i in data["authorization_scopes"]})
         self.verify_system_scope(role_source.source_system_id, auth_system_ids)
+
+        # 静默剔除：已交接权限在 TTL 内不允许通过全量 members 写回
+        data["members"] = self.suppression_biz.filter(HandoverObjectType.ROLE_IDS.value, str(role.id), data["members"])
 
         # 兼容member格式
         data["members"] = [{"username": username} for username in data["members"]]

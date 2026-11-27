@@ -15,6 +15,8 @@ from rest_framework import exceptions
 from rest_framework.response import Response
 
 from backend.api.constants import ALLOW_ANY
+from backend.apps.handover.constants import HandoverObjectType
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.org_sync.syncer import Syncer
 from backend.biz.policy import PolicyBean, PolicyBeanList, PolicyOperationBiz, PolicyQueryBiz
 from backend.biz.role import RoleBiz
@@ -107,6 +109,7 @@ class AuthViewMixin:
     policy_query_biz = PolicyQueryBiz()
     policy_operation_biz = PolicyOperationBiz()
     role_auth_scope_trans = RoleAuthScopeTrans()
+    suppression_biz = HandoverSuppressionBiz()
 
     def grant_or_revoke(self, operate: OperateEnum, subject: Subject, policy_list: PolicyBeanList) -> List[PolicyBean]:
         """授权或回收权限"""
@@ -116,6 +119,15 @@ class AuthViewMixin:
         if subject.type == SubjectType.USER.value and subject.id.lower() == ADMIN_USER:
             # 原样返回，PolicyID=0，默认没有执行实际授权
             return policy_list.policies
+
+        # 已成功交接的权限在 TTL 内被接入系统重新授权时，静默忽略
+        if operate == OperateEnum.GRANT.value and subject.type == SubjectType.USER.value:
+            suppressed = self.suppression_biz.get_suppressed(
+                HandoverObjectType.CUSTOM_POLICIES.value, system_id, [subject.id]
+            )
+            if suppressed:
+                logger.info("readd_suppression policy: username=%s system_id=%s", subject.id, system_id)
+                return policy_list.policies
 
         # 检测被授权的用户是否存在，不存在则尝试同步
         if subject.type == SubjectType.USER.value:

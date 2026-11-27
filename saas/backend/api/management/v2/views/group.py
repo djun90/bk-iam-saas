@@ -49,6 +49,7 @@ from backend.apps.group.audit import (
 from backend.apps.group.models import Group
 from backend.apps.group.serializers import GroupAddMemberSLZ
 from backend.apps.group.views import split_members_to_subject_and_template
+from backend.apps.handover.constants import HandoverObjectType
 from backend.apps.policy.models import Policy
 from backend.apps.policy.serializers import PolicySLZ
 from backend.apps.role.models import Role
@@ -62,6 +63,7 @@ from backend.biz.group import (
     GroupMemberExpiredAtBean,
     GroupTemplateGrantBean,
 )
+from backend.biz.handover import HandoverSuppressionBiz
 from backend.biz.policy import PolicyOperationBiz, PolicyQueryBiz
 from backend.biz.role import RoleBiz, RoleListQuery
 from backend.biz.subject_template import SubjectTemplateBiz
@@ -352,6 +354,7 @@ class ManagementGroupMemberViewSet(GenericViewSet):
     group_check_biz = GroupCheckBiz()
     role_biz = RoleBiz()
     subject_template_biz = SubjectTemplateBiz()
+    suppression_biz = HandoverSuppressionBiz()
 
     @swagger_auto_schema(
         operation_description="用户组成员列表",
@@ -390,6 +393,14 @@ class ManagementGroupMemberViewSet(GenericViewSet):
         members, subject_template_ids = split_members_to_subject_and_template(members_data)
         # 排除组织架构中不存在的成员
         members = remove_not_exist_subject(members)
+
+        # 静默剔除：过滤放在配额/范围校验之前，避免被忽略成员占用配额
+        allowed_usernames = self.suppression_biz.filter(
+            HandoverObjectType.GROUP_IDS.value,
+            str(group.id),
+            [m.id for m in members if m.type == SubjectType.USER.value],
+        )
+        members = [m for m in members if m.type != SubjectType.USER.value or m.id in allowed_usernames]
 
         # 检测成员是否满足管理的授权范围
         role = self.role_biz.get_role_by_group_id(group.id)

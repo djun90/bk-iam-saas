@@ -569,5 +569,8 @@ PCG_RESIGN_APP_ID = env.str("PCG_RESIGN_APP_ID", default="")
 PCG_RESIGN_APP_SECRET = env.str("PCG_RESIGN_APP_SECRET", default="")
 PCG_DEPARTMENT_IDS = env.list("PCG_DEPARTMENT_IDS", cast=int, default=[])
 
+# 权限交接后，接入系统定时同步重新添加已交接权限的抑制窗口，单位：天；0 表示关闭
+BKAPP_READD_SUPPRESSION_TTL_DAYS = env.int("BKAPP_READD_SUPPRESSION_TTL_DAYS", default=15)
+
 # 是否开启权限交接 ITSM 审批流程
 ENABLE_HANDOVER_APPROVAL = env.bool("BKAPP_ENABLE_HANDOVER_APPROVAL", default=False)

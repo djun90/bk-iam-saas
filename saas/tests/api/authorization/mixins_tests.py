@@ -66,6 +66,8 @@ class TestAuthViewMixin:
 
     def test_grant_or_revoke_user(self):
         mixin = AuthViewMixin()
+        mixin.suppression_biz = mock.Mock()
+        mixin.suppression_biz.get_suppressed = mock.Mock(return_value=set())
         mixin.policy_operation_biz.alter = mock.Mock(return_value=None)
         mixin.policy_query_biz.list_by_subject = mock.Mock(return_value=[])
         mixin._check_or_sync_user = mock.Mock(return_value=None)
